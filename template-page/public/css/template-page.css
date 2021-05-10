@@ -1,0 +1,108 @@
+.wordpress-user-password-container {
+    border: 1px solid rgba(0,0,0,.1);
+    border-radius: .25rem;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -1px rgba(0,0,0,.06);
+    font-size: 17px;
+    max-width: 50%;
+    margin: 10px;
+    padding: 10px;
+}
+
+@media (max-width:1279px) {
+    .wordpress-user-password-container {
+        font-size: 24px;
+        max-width: 100%;
+    }
+}
+
+.wordpress-user-password-container>div {
+    margin: 10px auto 0;
+    max-width: 350px;
+}
+
+.wordpress-user-password-container label {
+    color: rgba(74,85,104);
+    font-weight: bold;
+}
+
+.wordpress-user-password-container input {
+    border-color: rgb(226, 232, 240);
+    border-radius: 0.25rem;
+    border-width: 1px;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -1px rgba(0,0,0,.06);
+    font-size: 17px;
+    margin-top: 10px;
+    padding: 0.5rem;
+}
+
+@media (max-width:1279px) {
+    .wordpress-user-password-container input {
+        font-size: 24px;
+        max-width: 65%;
+    }
+}
+
+.wordpress-user-password-container button {
+    background-color: rgb(66, 153, 225);
+    border-radius: 0.25rem;
+    border-width: 0px;
+    color: white;
+    float: right;
+    font-size: 34px;
+    font-weight: bold;
+    margin-left: 8px;
+    margin-top: 10px;
+    padding: 0.5rem; 
+}
+
+@media (max-width:1279px) {
+    .wordpress-user-password-container button {
+        font-size: 48px;
+        max-width: 30%;
+    }
+}
+
+.launch-stack-container {
+    border: 1px solid rgba(0,0,0,.1);
+    border-radius: .25rem;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -1px rgba(0,0,0,.06);
+    font-size: 17px;
+    margin: 10px;
+    max-width: 50%;
+    padding: 10px;
+}
+
+@media (max-width:1279px) {
+    .launch-stack-container {
+        font-size: 24px;
+        max-width: 100%;
+    }
+}
+
+.launch-stack-container>div {
+    margin: 10px auto 0;
+    max-width: 350px;
+}
+
+.launch-stack-container label {
+    color: rgba(74,85,104);
+    display: block;
+    font-weight: bold;
+}
+
+.launch-stack-container input {
+    background-color: rgba(0,0,0,.1);
+    border-color: rgb(226, 232, 240);
+    border-radius: 0.25rem;
+    border-width: 1px;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -1px rgba(0,0,0,.06);
+    font-size: 17px;
+    margin-top: 10px;
+    padding: 0.5rem;
+}
+
+@media (max-width:1279px) {
+    .launch-stack-container input {
+        font-size: 24px;
+    }
+}

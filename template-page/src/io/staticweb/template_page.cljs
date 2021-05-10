@@ -1,8 +1,12 @@
 (ns io.staticweb.template-page
   (:require [cljs-http.client :as http]
+            [reagent.core :as r]
+            [reagent.dom :as rd]
             ["crypto-js/core" :as crypto-js]
             ["crypto-js/md5" :as md5]
-            ["uuid" :as uuid]))
+            ["react-password-strength-bar" :default PasswordStrengthBar]
+            ["uuid" :as uuid]
+            ["zxcvbn" :as zxcvbn]))
 
 ; PHPass Portable Hash
 ; https://passlib.readthedocs.io/en/stable/lib/passlib.hash.phpass.html
@@ -45,8 +49,8 @@
                   (let [v (as-unsigned-byte (aget bytes i))]
                     (recur v (add-char r v 0) (inc i))))))))))))
 
-(defn rand-salt []
-  (-> (js/Uint8Array. 6)
+(defn rand-salt [& [n-bytes]]
+  (-> (js/Uint8Array. (or n-bytes 6))
     js/window.crypto.getRandomValues
     itoa64-encode))
 
@@ -81,52 +85,104 @@
         (str "\\$P\\$" (nth itoa64-chars rounds) salt (base16->itoa64 (str hash)))
         (recur (dec i) (md5 (.concat hash pass)))))))
 
-(defn set-auth-header []
-  (-> js/document (.getElementById "cloudfront-authorization-header-value")
-    .-textContent
-    (set! (str "Bearer " (uuid/v4)))))
+(def extra-password-dict-words
+  #js["initial" "open" "source" "static" "staticweb" "staticweb.io"
+      "user" "wordpress" "wp"])
+(def quick-create-base "https://us-east-1.console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/quickcreate")
 
-(defn set-launch-stack-link []
+(defn strong-password []
+  (loop [n-bytes 8]
+    (let [password (rand-salt n-bytes)]
+      (if (>= (.-score (zxcvbn password)) 4)
+        password
+        (recur (inc n-bytes))))))
+
+(defn PasswordInput []
+  (let [password-id (str (gensym "G__PasswordInput"))]
+    (fn [{:keys [on-change on-random password score user-inputs]}]
+      [:div {:class "wordpress-user-password-container"}
+       [:div
+        [:label {:for password-id}
+         "Initial WordPress user password:"]
+        [:input {:id password-id
+                 :on-change on-change
+                 :style {:background-color ({0 "#ff5846"
+                                             1 "#ff5846"
+                                             2 "#ffc45d"
+                                             3 "#3ba0ff"
+                                             4 "#35d291"}
+                                            score)}
+                 :value password}]
+        [:button {:on-click on-random}
+         "\uD83C\uDFB2"]]
+       [:> PasswordStrengthBar
+        {:password password
+         :userInputs (if (array? user-inputs)
+                       user-inputs
+                       (into-array user-inputs))}]
+       [:p "Please write this password down. You will need it to log in to WordPress. The username is always "
+        [:b "user"] "."]
+       [:p "You should change the password immediately after you log in for the first time."
+        " You can change the username then as well."]])))
+
+(defn launch-stack-link [{:keys [auth-header stack-name template-url user-pass]}]
   (let [base "https://us-east-1.console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/quickcreate"
-        params {:stackName (-> js/document
-                             (.getElementById "stack-name")
-                             .-value)
-                :templateURL (-> js/document
-                             (.getElementById "template-url")
-                             .-value)
-                :param_CloudFrontAuthorizationHeader
-                (-> js/document
-                  (.getElementById "cloudfront-authorization-header-value")
-                  .-textContent)
-                :param_UserPass
-                (when (-> js/document (.getElementById "wordpress-user-password")
-                        .-value seq)
-                  (-> js/document
-                    (.getElementById "user-pass-value")
-                    .-textContent))}]
-    (-> js/document (.getElementById "launch-stack-link") .-href
-      (set! (str base "?" (http/generate-query-string params))))))
+        params {:stackName stack-name
+                :templateURL template-url
+                :param_CloudFrontAuthorizationHeader auth-header
+                :param_UserPass user-pass}]
+    (str base "?" (http/generate-query-string params))))
 
-(defn set-password-hash []
-  (let [txt (-> js/document (.getElementById "wordpress-user-password")
-            .-value)
-        hash (when (seq txt) (hash-password txt))]
-    (set! (-> js/document (.getElementById "user-pass-value") .-textContent)
-      (or hash "Please enter a password."))
-    (set-launch-stack-link)))
+(defn LaunchStack [{:keys [user-pass] :as params}]
+  [:a {:href (when (seq user-pass) (launch-stack-link params))
+       :target "_blank"}
+   [:img {:src "https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png"}]])
 
-(defn check-can-launch [])
+(defn TemplateParameters []
+  (let [auth-header-id (str (gensym "G__AuthHeader"))
+        user-pass-id (str (gensym "G__UserPass"))]
+    (fn [{:keys [auth-header user-pass] :as params}]
+      [:div {:class "launch-stack-container"}
+       [:div
+        [:h3 "Launch Stack"]]
+       [:div
+        [LaunchStack params]]
+       [:div
+        [:label {:for auth-header-id}
+         "CloudFrontAuthorizationHeader:"]
+        [:input {:id auth-header-id :readonly true :value auth-header}]]
+       [:div
+        [:label {:for user-pass-id}
+         "UserPass:"]
+        [:input {:id user-pass-id
+                 :readonly true
+                 :style (when (empty? user-pass) {:background-color "rgb(255, 88, 70)"})
+                 :value (or user-pass "Please enter a strong password.")}]]])))
 
-(defn init []
-  (-> js/document (.getElementById "wordpress-user-password")
-    .-onchange
-    (set! set-password-hash))
-  (-> js/document (.getElementById "wordpress-user-password")
-    .-onkeydown
-    (set! set-password-hash))
-  (-> js/document (.getElementById "launch-stack-link")
-    .-onkeydown
-    (set! set-password-hash))
-  (set-auth-header)
-  (set-password-hash))
+(defn App []
+  (let [state (r/atom {:auth-header (str "Bearer " (uuid/v4))
+                       :password (strong-password)
+                       :template-url (-> js/document
+                                       (.getElementById "template-url")
+                                       .-value)})]
+    (fn []
+      (let [{:keys [auth-header password template-url]} @state
+            score (.-score (zxcvbn password))]
+        [:div {:style {:font-family "Inter var,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue,Arial,Noto Sans,sans-serif,Apple Color Emoji,Segoe UI Emoji,Segoe UI Symbol,Noto Color Emoji"}}
+         [PasswordInput {:on-change #(swap! state assoc :password
+                                       (.-value (.-target %)))
+                         :on-random #(swap! state assoc :password
+                                       (strong-password))
+                         :password password
+                         :score score
+                         :user-inputs extra-password-dict-words}]
+         [TemplateParameters {:auth-header auth-header
+                              :stack-name "StaticWeb WordPress"
+                              :template-url template-url
+                              :user-pass (when (< 1 score)
+                                           (hash-password password))}]]))))
+
+(defn ^:export ^:dev/after-load init []
+  (rd/render [App]
+    (js/document.getElementById "reagent-mount")))
 
