@@ -220,7 +220,7 @@
                                        .-value)})]
     (fn []
       (let [{:keys [auth-header password template-url]} @state
-            score (.-score (zxcvbn password))]
+            score (.-score (zxcvbn password extra-password-dict-words))]
         [:div {:style {:font-family "Inter var,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue,Arial,Noto Sans,sans-serif,Apple Color Emoji,Segoe UI Emoji,Segoe UI Symbol,Noto Color Emoji"}}
          [PasswordInput {:on-change #(swap! state assoc :password
                                        (.-value (.-target %)))
