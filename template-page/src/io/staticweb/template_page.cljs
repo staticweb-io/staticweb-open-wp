@@ -98,12 +98,25 @@
      [:<>
       children]]))
 
-(defn CopyButton [{:keys [input-id]}]
-  [:button {:on-click #(when-let [el (js/document.getElementById input-id)]
-                         (.select el)
-                         (.setSelectionRange el 0 99999)
-                         (js/document.execCommand "copy"))}
-   "\ud83d\udccb"])
+(defn CopyButton []
+  (let [anchor-ref (clojure.core/atom nil)
+        open? (r/atom false)]
+    (fn [{:keys [input-id]}]
+      [:<>
+       [Popper {:anchor-ref anchor-ref
+                :props {:open @open?
+                        :placement "top-start"}}
+        [:div {:class "popper"
+               :on-click #(reset! open? false)
+               :tab-index 0}
+         "Copied!"]]
+       [:button {:on-click #(when-let [el (js/document.getElementById input-id)]
+                              (.select el)
+                              (.setSelectionRange el 0 99999)
+                              (js/document.execCommand "copy")
+                              (swap! open? not))
+                 :ref #(reset! anchor-ref %)}
+        "\ud83d\udccb"]])))
 
 (defn strong-password []
   (loop [n-bytes 8]
