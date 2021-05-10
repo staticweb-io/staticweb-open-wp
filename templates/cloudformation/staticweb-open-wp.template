@@ -125,6 +125,46 @@
       },
       "Type" : "AWS::IAM::ManagedPolicy"
     },
+    "DataLifecycleManagerPolicy" : {
+      "Properties" : {
+        "PolicyDocument" : {
+          "Statement" : [ {
+            "Action" : [ "ec2:CreateSnapshot", "ec2:CreateSnapshots", "ec2:DeleteSnapshot", "ec2:DescribeInstances", "ec2:DescribeVolumes", "ec2:DescribeSnapshots", "ec2:EnableFastSnapshotRestores", "ec2:DescribeFastSnapshotRestores", "ec2:DisableFastSnapshotRestores", "ec2:CopySnapshot", "ec2:ModifySnapshotAttribute", "ec2:DescribeSnapshotAttribute" ],
+            "Effect" : "Allow",
+            "Resource" : "*"
+          }, {
+            "Action" : "ec2:CreateTags",
+            "Effect" : "Allow",
+            "Resource" : "arn:aws:ec2:*::snapshot/*"
+          }, {
+            "Action" : [ "events:PutRule", "events:DeleteRule", "events:DescribeRule", "events:EnableRule", "events:DisableRule", "events:ListTargetsByRule", "events:PutTargets", "events:RemoveTargets" ],
+            "Effect" : "Allow",
+            "Resource" : "arn:aws:events:*:*:rule/AwsDataLifecycleRule.managed-cwe.*"
+          } ],
+          "Version" : "2012-10-17"
+        }
+      },
+      "Type" : "AWS::IAM::ManagedPolicy"
+    },
+    "DataLifecycleManagerRole" : {
+      "Properties" : {
+        "AssumeRolePolicyDocument" : {
+          "Statement" : [ {
+            "Action" : "sts:AssumeRole",
+            "Effect" : "Allow",
+            "Principal" : {
+              "Service" : "dlm.amazonaws.com"
+            }
+          } ],
+          "Version" : "2012-10-17"
+        },
+        "ManagedPolicyArns" : [ {
+          "Ref" : "DataLifecycleManagerPolicy"
+        } ],
+        "Path" : "/"
+      },
+      "Type" : "AWS::IAM::Role"
+    },
     "LoggingBucket" : {
       "Properties" : {
         "AccessControl" : "Private",
@@ -608,9 +648,7 @@
       "Properties" : {
         "Description" : "WordPress Server Backups",
         "ExecutionRoleArn" : {
-          "Fn::Join" : [ "", [ "arn:aws:iam::", {
-            "Ref" : "AWS::AccountId"
-          }, ":role/service-role/AWSDataLifecycleManagerDefaultRole" ] ]
+          "Fn::GetAtt" : [ "DataLifecycleManagerRole", "Arn" ]
         },
         "PolicyDetails" : {
           "ResourceTypes" : [ "INSTANCE" ],

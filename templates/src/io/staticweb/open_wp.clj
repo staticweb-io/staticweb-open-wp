@@ -309,14 +309,61 @@
        "staticweb:stack-id" stack-id)}
     :CreationPolicy {:ResourceSignal {:Timeout "PT15M"}}}
 
+   :DataLifecycleManagerPolicy
+   {:Type "AWS::IAM::ManagedPolicy"
+    :Properties
+    {:PolicyDocument
+     {:Version "2012-10-17"
+      :Statement
+      [{:Action ["ec2:CreateSnapshot"
+                 "ec2:CreateSnapshots"
+                 "ec2:DeleteSnapshot"
+                 "ec2:DescribeInstances"
+                 "ec2:DescribeVolumes"
+                 "ec2:DescribeSnapshots"
+                 "ec2:EnableFastSnapshotRestores"
+                 "ec2:DescribeFastSnapshotRestores"
+                 "ec2:DisableFastSnapshotRestores"
+                 "ec2:CopySnapshot"
+                 "ec2:ModifySnapshotAttribute"
+                 "ec2:DescribeSnapshotAttribute"]
+        :Effect "Allow"
+        :Resource "*"}
+       {:Action "ec2:CreateTags"
+        :Effect "Allow"
+        :Resource "arn:aws:ec2:*::snapshot/*"}
+       {:Action ["events:PutRule"
+                 "events:DeleteRule"
+                 "events:DescribeRule"
+                 "events:EnableRule"
+                 "events:DisableRule"
+                 "events:ListTargetsByRule"
+                 "events:PutTargets"
+                 "events:RemoveTargets"]
+        :Effect "Allow"
+        :Resource "arn:aws:events:*:*:rule/AwsDataLifecycleRule.managed-cwe.*"}]}}}
+
+   ;; On one account there is an AWS-created AWSDataLifecycleManagerDefaultRole,
+   ;; but on another account it doesn't exist. So we create an identical role
+   ;; so the template works on all accounts.
+   :DataLifecycleManagerRole
+   {:Type "AWS::IAM::Role"
+    :Properties
+    {:AssumeRolePolicyDocument
+     {:Version "2012-10-17"
+      :Statement
+      [{:Action "sts:AssumeRole"
+        :Effect "Allow"
+        :Principal {:Service "dlm.amazonaws.com"}}]}
+     :Path "/"
+     :ManagedPolicyArns
+     [(ref :DataLifecycleManagerPolicy)]}}
+
    :WPServerLifecyclePolicy
    {:Type "AWS::DLM::LifecyclePolicy"
     :Properties
     {:Description "WordPress Server Backups"
-     :ExecutionRoleArn
-     (join ""
-       ["arn:aws:iam::" account-id
-        ":role/service-role/AWSDataLifecycleManagerDefaultRole"])
+     :ExecutionRoleArn (arn :DataLifecycleManagerRole)
      :PolicyDetails
      {:ResourceTypes ["INSTANCE"]
       :TargetTags (tags "staticweb:stack-id" stack-id)
