@@ -1,0 +1,9 @@
+{:db
+ {:dbname "wordpress"
+  :dbtype "mysql"
+  :host "localhost"
+  :password "8BVMm2jqDE6iADNyfaVCxoCzr3eBY6Ep"
+  :port 3306
+  :root-password "Sr948Eiehjh6VnU4LBt44VZ5WBc249NU"
+  :user "wordpress"}
+ :idle-seconds 1800}

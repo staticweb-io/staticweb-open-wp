@@ -1,0 +1,183 @@
+{
+  "builders": [
+    {
+      "type": "amazon-ebs",
+      "region": "us-east-1",
+      "source_ami": "ami-0adb6517915458bdb",
+      "instance_type": "t2.micro",
+      "ssh_username": "admin",
+      "ami_name": "StaticWeb Open WP {{timestamp}}"
+    }
+  ],
+  "provisioners": [
+    {
+      "type": "file",
+      "source": "files/50unattended-upgrades",
+      "destination": "/home/admin/50unattended-upgrades"
+    },
+    {
+      "type": "file",
+      "source": "files/php.ini",
+      "destination": "/home/admin/php.ini"
+    },
+    {
+      "type": "file",
+      "source": "files/www-php-7.4.conf",
+      "destination": "/home/admin/www-php-7.4.conf"
+    },
+    {
+      "type": "file",
+      "source": "files/www-php-8.0.conf",
+      "destination": "/home/admin/www-php-8.0.conf"
+    },
+    {
+      "type": "shell",
+      "script": "scripts/kill-apt-services.sh"
+    },
+    {
+      "type": "shell",
+      "inline": [
+        "sudo useradd staticweb -G www-data",
+        "sudo usermod --shell /bin/bash staticweb",
+        "echo \"staticweb ALL=(ALL) NOPASSWD:ALL\" > staticweb",
+        "sudo chown root:root staticweb",
+        "sudo mv staticweb /etc/sudoers.d/",
+        "sudo usermod -a -G staticweb www-data",
+
+        "wget https://s3.us-east-1.amazonaws.com/amazon-ssm-us-east-1/latest/debian_amd64/amazon-ssm-agent.deb",
+        "sudo dpkg -i amazon-ssm-agent.deb",
+        "rm amazon-ssm-agent.deb",
+        "wget https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz",
+        "tar xzf aws-cfn-bootstrap-latest.tar.gz",
+        "cd aws-cfn-bootstrap-*",
+        "sudo python setup.py install",
+        "cd",
+        "sudo rm -rf aws-cfn-bootstrap*",
+        "sudo wget -O /etc/apt/trusted.gpg.d/php.gpg https://packages.sury.org/php/apt.gpg",
+        "echo \"deb https://packages.sury.org/php/ $(lsb_release -sc) main\" | sudo tee /etc/apt/sources.list.d/php.list",
+        "sudo apt update && sudo apt upgrade -y",
+        "sudo apt install -y composer mariadb-server nginx openjdk-11-jre-headless php7.4 php7.4-curl php7.4-fpm php7.4-imagick php7.4-mbstring php7.4-mysql php7.4-xml php7.4-zip php8.0 php8.0-curl php8.0-fpm php8.0-imagick php8.0-mysql php8.0-xml php8.0-zip",
+        "sudo chown root:root 50unattended-upgrades php.ini www-php-*.conf",
+        "sudo mv 50unattended-upgrades /etc/apt/apt.conf.d/",
+        "sudo cp php.ini /etc/php/7.4/fpm/",
+        "sudo mv php.ini /etc/php/8.0/fpm/",
+        "sudo mv www-php-7.4.conf /etc/php/7.4/fpm/pool.d/www.conf",
+        "sudo mv www-php-8.0.conf /etc/php/8.0/fpm/pool.d/www.conf"
+      ]
+    },
+
+
+    {
+      "type": "file",
+      "source": "files/config.edn",
+      "destination": "/home/admin/config.edn"
+    },
+    {
+      "type": "file",
+      "source": "files/crontab",
+      "destination": "/home/admin/crontab"
+    },
+    {
+      "type": "file",
+      "source": "../static-wp-daemon",
+      "destination": "/home/admin/static-wp-daemon"
+    },
+    {
+      "type": "shell",
+      "inline": [
+        "sudo apt install -y rng-tools",
+        "sudo apt autoremove -y",
+
+        "echo 'HRNGDEVICE=/dev/urandom' | sudo tee -a /etc/default/rng-tools",
+
+        "sudo ln -s /usr/bin/php7.4",
+        "sudo mv php7.4 /usr/bin/php.default",
+
+        "sudo chown root:root crontab",
+        "sudo mv crontab /etc/",
+
+        "wget -q https://wordpress.org/wordpress-5.7.tar.gz",
+        "sha256sum wordpress-*.tar.gz | grep 92be8c4afd0186f783a12bad994baecc8f941a88535acddecbae0d7702169b71",
+        "tar xf wordpress-*.tar.gz",
+        "rm wordpress-*.tar.gz",
+        "wget -q https://files.phpmyadmin.net/phpMyAdmin/5.1.0/phpMyAdmin-5.1.0-all-languages.tar.xz",
+        "sha256sum phpMyAdmin-*.tar.xz | grep aa8ccf357f672012384df34e1c2bc70147476761c8458a0dad6233497e142c68",
+        "tar xf phpMyAdmin-*.tar.xz",
+        "rm phpMyAdmin-*.tar.xz",
+        "mv phpMyAdmin-* phpmyadmin",
+        "wget -q https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar",
+        "php wp-cli.phar --info",
+        "chmod +x wp-cli.phar",
+        "sudo mv wp-cli.phar /usr/local/bin/wp",
+        "wp --info",
+
+        "cd wordpress",
+        "mkdir tmp",
+        "sudo mysql -u root -e \"CREATE USER 'wordpress'@'localhost' IDENTIFIED BY '8BVMm2jqDE6iADNyfaVCxoCzr3eBY6Ep'; ALTER USER 'root'@'localhost' IDENTIFIED BY 'Sr948Eiehjh6VnU4LBt44VZ5WBc249NU'; FLUSH PRIVILEGES;\"",
+        "mysql -u root --password=Sr948Eiehjh6VnU4LBt44VZ5WBc249NU -e \"CREATE DATABASE wordpress; GRANT ALL PRIVILEGES ON wordpress.* TO 'wordpress'@'localhost'; FLUSH PRIVILEGES;\"",
+        "wp config create --dbname=wordpress --dbuser=wordpress --dbpass=8BVMm2jqDE6iADNyfaVCxoCzr3eBY6Ep",
+        "echo \"\ndefine('WP_AUTO_UPDATE_CORE', false);\n\" >> wp-config.php",
+        "wp core install --url=\"https://example.com\" --title=WordPress --admin_user=user --admin_email=\"user@example.com\"",
+        "wp option update permalink_structure \"/%postname%/\"",
+        "wp theme update --all",
+        "wp plugin uninstall --deactivate --all",
+        "wp core update --version=5.7.1",
+        "wp plugin install classic-editor --version=1.6 --activate",
+        "wp plugin install redirection --version=5.1.1 --activate",
+        "wp redirection database install",
+        "wp redirection setting monitor_types --set=\"[\\\"post\\\",\\\"page\\\"]\"",
+        "cd wp-content/plugins",
+
+        "wget -q https://static.staticweb.io/wordpress-plugins/staticweb-io-2.3.0.zip",
+        "sha256sum staticweb-io-*.zip | grep e88ec9acb1bab10b17f38d2797927cc7d2a00b7eb6a99ac694968442fbdb7f2a",
+        "wget -q https://static.staticweb.io/wordpress-plugins/wp2static-7.1.6.zip",
+        "sha256sum wp2static-7*.zip | grep 3a5b08e577ef21f3252a4d36e25b3935643bd149fcab90359110cbc1dd94cbc3",
+        "wget -q https://static.staticweb.io/wordpress-plugins/wp2static-addon-advanced-crawling-1e6da9925dec898716453c85e0c8aa3d77472102.zip",
+        "sha256sum wp2static-addon-advanced-crawling-*.zip | grep 7302ec9143ea2cd234f99e0ca9f1efe4f97e7329b5a160a3a39e670fbfcd7e05",
+        "wget -q https://static.staticweb.io/wordpress-plugins/wp2static-addon-algolia-a986b0141d149dcf31af17cee077c27644081fae.zip",
+        "sha256sum wp2static-addon-algolia-*.zip | grep df1f2dd9be884b7217f3e2103ff942b920e905d46b09cb56c52cd17360b3db47",
+        "wget -q https://static.staticweb.io/wordpress-plugins/wp2static-addon-s3-2ced5dc4d6008750c820f7eb88a7a5f3a00848ed.zip",
+        "sha256sum wp2static-addon-s3-*.zip | grep 6acf99274951c4bc62dc402f4a4284ece008d8a4b29883041164cc6f088a6fe7",
+
+        "unzip -q \"*.zip\"",
+        "rm *.zip",
+        "wp plugin activate staticweb-io wp2static wp2static-addon-advanced-crawling wp2static-addon-s3",
+        "mysql -u wordpress --password=8BVMm2jqDE6iADNyfaVCxoCzr3eBY6Ep --database=wordpress -e \"UPDATE wp_options SET option_value='classic' WHERE option_name='classic-editor-replace'; UPDATE wp_options SET option_value='allow' WHERE option_name='classic-editor-allow-users'; UPDATE wp_wp2static_addons SET enabled=1 WHERE slug='wp2static-addon-advanced-crawling' OR slug='wp2static-addon-s3'; UPDATE wp_wp2static_addon_s3_options SET value=10 WHERE name='cfMaxPathsToInvalidate';\"",
+        "cd",
+
+        "curl -sLO https://raw.githubusercontent.com/babashka/babashka/master/install",
+        "sudo bash install",
+        "rm install",
+
+        "sudo mkdir /opt/staticweb",
+        "sudo mv config.edn /opt/staticweb",
+
+        "sudo mv static-wp-daemon /opt/staticweb",
+        "cd /opt/staticweb/static-wp-daemon",
+        "sudo bb -e \"(require 'io.staticweb.static-wp-daemon.user)\"",
+        "sudo chown -R root:root /opt/staticweb",
+        "sudo chmod -R og-rwx /opt/staticweb",
+
+        "sudo rm /etc/nginx/sites-enabled/default",
+
+        "cd"
+       ]
+    },
+    {
+      "type": "shell",
+      "script": "scripts/enable-apt-services.sh"
+    },
+    {
+      "type": "file",
+      "source": "files/.wp-cli/config.yml",
+      "destination": "/home/admin/.wp-cli/config.yml"
+    },
+    {
+      "type": "shell",
+      "inline": [
+        "sudo mv /home/admin /home/staticweb",
+        "sudo chown -R staticweb:staticweb /home/staticweb"
+      ]
+    }
+  ]
+}
