@@ -1,2 +1,2 @@
 {:paths ["resources" "src"]
- :deps {comb/comb {:mvn/version "0.1.1"}}}
+ :deps {}}

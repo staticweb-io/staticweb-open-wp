@@ -2,16 +2,16 @@
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.java.shell :refer (sh)]
-            [comb.template :as template]
             [io.staticweb.static-wp-daemon.mysql :as mysql
              :refer (mysql-real-escape-string-quote+ q)]
-            [io.staticweb.static-wp-daemon.util :as util]))
+            [io.staticweb.static-wp-daemon.util :as util]
+            [selmer.parser :as selmer]))
 
 (def ^:const php-versions ["7.4" "8.0"])
 
 (defn get-wordpress-config [db-password]
   (let [template (slurp (io/resource "io/staticweb/static-wp-daemon/wp-config-template.php"))]
-    (template/eval template
+    (selmer/render template
       {:DB_PASSWORD db-password
        :AUTH_KEY (util/wp-config-key)
        :SECURE_AUTH_KEY (util/wp-config-key)
@@ -27,11 +27,11 @@
         local-template (slurp (io/resource "io/staticweb/static-wp-daemon/wordpress-php-local-template"))]
       (doseq [php-version php-versions]
         (spit (str "/etc/nginx/sites-available/wordpress-php-" php-version)
-          (template/eval template
+          (selmer/render template
             {:auth-header cloudfront-auth-header
              :php-version php-version}))
         (spit (str "/etc/nginx/sites-available/wordpress-php-local-" php-version)
-          (template/eval local-template
+          (selmer/render local-template
             {:php-version php-version})))))
 
 (defn link-default-nginx-sites []

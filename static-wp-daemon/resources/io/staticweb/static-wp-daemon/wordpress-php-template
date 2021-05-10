@@ -15,7 +15,7 @@ server {
 			return 401;
 		}
 
-		if ( $http_staticweb_cloudfront_authorization != '<%= auth-header %>' ) {
+		if ( $http_staticweb_cloudfront_authorization != '{{ auth-header }}' ) {
                         access_log /var/log/nginx/access-unauth.log;
 			return 403;
 		}
@@ -33,14 +33,14 @@ server {
                         return 401;
                 }
 
-                if ( $http_staticweb_cloudfront_authorization != '<%= auth-header %>' ) {
+                if ( $http_staticweb_cloudfront_authorization != '{{ auth-header }}' ) {
                         access_log /var/log/nginx/access-unauth.log;
                         return 403;
                 }
 
 		include snippets/fastcgi-php.conf;
 
-		fastcgi_pass unix:/run/php/php<%= php-version %>-fpm.sock;
+		fastcgi_pass unix:/run/php/php{{ php-version }}-fpm.sock;
 	}
 
         location ~ /\.ht {
@@ -53,7 +53,7 @@ server {
                         return 401;
                 }
 
-                if ( $http_staticweb_cloudfront_authorization != '<%= auth-header %>' ) {
+                if ( $http_staticweb_cloudfront_authorization != '{{ auth-header }}' ) {
                         access_log /var/log/nginx/access-unauth.log;
                         return 403;
                 }
@@ -65,7 +65,7 @@ server {
 
                 location ~ \.php$ {
                         include snippets/fastcgi-php.conf;
-                        fastcgi_pass unix:/run/php/php<%= php-version %>-fpm.sock;
+                        fastcgi_pass unix:/run/php/php{{ php-version }}-fpm.sock;
                 }
         }
 }

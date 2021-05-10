@@ -30,7 +30,7 @@ define( 'DB_NAME', 'wordpress' );
 define( 'DB_USER', 'wordpress' );
 
 /** MySQL database password */
-define( 'DB_PASSWORD', '<%= DB_PASSWORD %>' );
+define( 'DB_PASSWORD', '{{ DB_PASSWORD }}' );
 
 /** MySQL hostname */
 define( 'DB_HOST', 'localhost:3306' );
@@ -50,14 +50,14 @@ define( 'DB_COLLATE', '' );
  *
  * @since 2.6.0
  */
-define('AUTH_KEY', '<%= AUTH_KEY %>');
-define('SECURE_AUTH_KEY', '<%= SECURE_AUTH_KEY %>');
-define('LOGGED_IN_KEY', '<%= LOGGED_IN_KEY %>');
-define('NONCE_KEY', '<%= NONCE_KEY %>');
-define('AUTH_SALT', '<%= AUTH_SALT %>');
-define('SECURE_AUTH_SALT', '<%= SECURE_AUTH_SALT %>');
-define('LOGGED_IN_SALT', '<%= LOGGED_IN_SALT %>');
-define('NONCE_SALT', '<%= NONCE_SALT %>');
+define('AUTH_KEY', '{{ AUTH_KEY }}');
+define('SECURE_AUTH_KEY', '{{ SECURE_AUTH_KEY }}');
+define('LOGGED_IN_KEY', '{{ LOGGED_IN_KEY }}');
+define('NONCE_KEY', '{{ NONCE_KEY }}');
+define('AUTH_SALT', '{{ AUTH_SALT }}');
+define('SECURE_AUTH_SALT', '{{ SECURE_AUTH_SALT }}');
+define('LOGGED_IN_SALT', '{{ LOGGED_IN_SALT }}');
+define('NONCE_SALT', '{{ NONCE_SALT }}');
 
 /**#@-*/
 
