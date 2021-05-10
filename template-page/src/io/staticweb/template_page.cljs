@@ -158,13 +158,13 @@
        [:div
         [:label {:for auth-header-id}
          "CloudFrontAuthorizationHeader:"]
-        [:input {:id auth-header-id :readonly true :value auth-header}]
+        [:input {:id auth-header-id :read-only true :value auth-header}]
         [CopyButton {:input-id auth-header-id}]]
        [:div
         [:label {:for user-pass-id}
          "UserPass:"]
         [:input {:id user-pass-id
-                 :readonly true
+                 :read-only true
                  :style (when (empty? user-pass) {:background-color "rgb(255, 88, 70)"})
                  :value (or user-pass "Please enter a strong password.")}]
         [CopyButton {:input-id user-pass-id}]]])))
