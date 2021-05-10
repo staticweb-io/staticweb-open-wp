@@ -36,7 +36,7 @@
    :WordPressAMI
    {:Description "AMI to use for the WordPress server."
     :Type "String"
-    :Default "ami-036f61946fc91a0d5"}
+    :Default "ami-070b9006b2d500921"}
    :WPCertificateArn
    {:Description
     "Arn of the certificate for the WordPress admin domain."
