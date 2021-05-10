@@ -1,0 +1,9 @@
+;; shadow-cljs configuration
+{:source-paths ["src"]
+ :dependencies [[cljs-http "0.1.46"]]
+ :dev-http {8080 "public"}
+ :builds
+ {:main
+  {:target :browser
+   :modules {:main {:init-fn io.staticweb.template-page/init}}
+   :release {:compiler-options {:optimizations :advanced}}}}}
