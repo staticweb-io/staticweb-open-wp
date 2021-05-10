@@ -90,6 +90,13 @@
       "user" "wordpress" "wp"])
 (def quick-create-base "https://us-east-1.console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/quickcreate")
 
+(defn CopyButton [{:keys [input-id]}]
+  [:button {:on-click #(when-let [el (js/document.getElementById input-id)]
+                         (.select el)
+                         (.setSelectionRange el 0 99999)
+                         (js/document.execCommand "copy"))}
+   "\ud83d\udccb"])
+
 (defn strong-password []
   (loop [n-bytes 8]
     (let [password (rand-salt n-bytes)]
@@ -113,6 +120,7 @@
                                              4 "#35d291"}
                                             score)}
                  :value password}]
+        [CopyButton {:input-id password-id}]
         [:button {:on-click on-random}
          "\uD83C\uDFB2"]]
        [:> PasswordStrengthBar
@@ -150,14 +158,16 @@
        [:div
         [:label {:for auth-header-id}
          "CloudFrontAuthorizationHeader:"]
-        [:input {:id auth-header-id :readonly true :value auth-header}]]
+        [:input {:id auth-header-id :readonly true :value auth-header}]
+        [CopyButton {:input-id auth-header-id}]]
        [:div
         [:label {:for user-pass-id}
          "UserPass:"]
         [:input {:id user-pass-id
                  :readonly true
                  :style (when (empty? user-pass) {:background-color "rgb(255, 88, 70)"})
-                 :value (or user-pass "Please enter a strong password.")}]]])))
+                 :value (or user-pass "Please enter a strong password.")}]
+        [CopyButton {:input-id user-pass-id}]]])))
 
 (defn App []
   (let [state (r/atom {:auth-header (str "Bearer " (uuid/v4))

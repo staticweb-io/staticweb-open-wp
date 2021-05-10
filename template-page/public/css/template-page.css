@@ -22,6 +22,7 @@
 
 .wordpress-user-password-container label {
     color: rgba(74,85,104);
+    display: block;
     font-weight: bold;
 }
 
@@ -32,13 +33,14 @@
     box-shadow: 0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -1px rgba(0,0,0,.06);
     font-size: 17px;
     margin-top: 10px;
+    max-width: 50%;
     padding: 0.5rem;
 }
 
 @media (max-width:1279px) {
     .wordpress-user-password-container input {
         font-size: 24px;
-        max-width: 65%;
+        max-width: 50%;
     }
 }
 
@@ -48,9 +50,9 @@
     border-width: 0px;
     color: white;
     float: right;
-    font-size: 34px;
+    font-size: 24px;
     font-weight: bold;
-    margin-left: 8px;
+    margin-left: 4px;
     margin-top: 10px;
     padding: 0.5rem; 
 }
@@ -103,6 +105,22 @@
 
 @media (max-width:1279px) {
     .launch-stack-container input {
+        font-size: 24px;
+    }
+}
+
+.launch-stack-container button {
+    border-radius: 0.25rem;
+    border-width: 0px;
+    font-size: 17px;
+    font-weight: bold;
+    margin-left: 8px;
+    margin-top: 10px;
+    padding: 0.5rem;
+}
+
+@media (max-width:1279px) {
+    .launch-stack-container button {
         font-size: 24px;
     }
 }
