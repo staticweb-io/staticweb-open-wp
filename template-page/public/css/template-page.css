@@ -1,3 +1,13 @@
+.popper {
+    background: white;
+    border: 1px solid rgba(0,0,0,.1);
+    border-radius: .25rem;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -1px rgba(0,0,0,.06);
+    font-size: 17px;
+    margin: 10px;
+    padding: 10px;
+}
+
 .wordpress-user-password-container {
     border: 1px solid rgba(0,0,0,.1);
     border-radius: .25rem;

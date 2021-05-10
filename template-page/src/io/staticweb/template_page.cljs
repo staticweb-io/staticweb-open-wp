@@ -4,6 +4,7 @@
             [reagent.dom :as rd]
             ["crypto-js/core" :as crypto-js]
             ["crypto-js/md5" :as md5]
+            ["@material-ui/core" :as mui]
             ["react-password-strength-bar" :default PasswordStrengthBar]
             ["uuid" :as uuid]
             ["zxcvbn" :as zxcvbn]))
@@ -90,6 +91,13 @@
       "user" "wordpress" "wp"])
 (def quick-create-base "https://us-east-1.console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/quickcreate")
 
+; https://cljdoc.org/d/reagent/reagent/1.0.0/doc/frequently-asked-questions/how-do-i-use-react-s-refs-
+(defn Popper [{:keys [anchor-ref props]} & [children]]
+  (when-let [anchorEl @anchor-ref]
+    [:> mui/Popper (assoc props :anchorEl anchorEl)
+     [:<>
+      children]]))
+
 (defn CopyButton [{:keys [input-id]}]
   [:button {:on-click #(when-let [el (js/document.getElementById input-id)]
                          (.select el)
@@ -141,10 +149,23 @@
                 :param_UserPass user-pass}]
     (str base "?" (http/generate-query-string params))))
 
-(defn LaunchStack [{:keys [user-pass] :as params}]
-  [:a {:href (when (seq user-pass) (launch-stack-link params))
-       :target "_blank"}
-   [:img {:src "https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png"}]])
+(defn LaunchStack []
+  (let [anchor-ref (clojure.core/atom nil)
+        open? (r/atom false)]
+    (fn [{:keys [user-pass] :as params}]
+      [:div
+       [Popper {:anchor-ref anchor-ref
+                :props {:open @open?
+                        :placement "bottom-start"}}
+        [:div {:class "popper"
+               :on-click #(reset! open? false)}
+         "Please enter a strong password."]]
+       [:a {:href (when (seq user-pass) (launch-stack-link params))
+            :ref #(reset! anchor-ref %)
+            :target "_blank"}
+        [:img {:on-click #(when (empty? user-pass)
+                            (swap! open? not))
+               :src "https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png"}]]])))
 
 (defn TemplateParameters []
   (let [auth-header-id (str (gensym "G__AuthHeader"))
