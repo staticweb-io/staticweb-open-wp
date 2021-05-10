@@ -1,7 +1,7 @@
-/.cpcache
 /template-page/public/js
-/target
+.cpcache
 .nrepl-port
 .shadow-cljs
 node_modules
 pom.xml
+target
