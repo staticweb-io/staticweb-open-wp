@@ -4,5 +4,9 @@
   "private": true,
   "devDependencies": {
     "shadow-cljs": "2.12.5"
+  },
+  "dependencies": {
+    "crypto-js": "^4.0.0",
+    "uuid": "^8.3.2"
   }
 }
