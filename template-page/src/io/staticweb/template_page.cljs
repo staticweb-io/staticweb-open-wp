@@ -221,7 +221,7 @@
                          :score score
                          :user-inputs extra-password-dict-words}]
          [TemplateParameters {:auth-header auth-header
-                              :stack-name "StaticWeb WordPress"
+                              :stack-name "StaticWeb-WordPress"
                               :template-url template-url
                               :user-pass (when (< 1 score)
                                            (hash-password password))}]]))))
