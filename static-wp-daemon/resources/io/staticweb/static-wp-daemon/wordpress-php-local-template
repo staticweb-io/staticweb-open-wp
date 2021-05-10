@@ -1,0 +1,41 @@
+server {
+	listen 127.0.0.1:80;
+	listen [::1]:80;
+	server_name localhost 127.0.0.1;
+
+	root /home/staticweb/wordpress;
+
+	index index.php index.html index.htm;
+
+	client_max_body_size 1G;
+
+	location / {
+		try_files $uri $uri/ =404;
+
+                if (!-e $request_filename) {
+                        rewrite ^(.+)$ /index.php?q=$1 last;
+                }
+	}
+
+	location ~ \.php$ {
+		include snippets/fastcgi-php.conf;
+
+		fastcgi_pass unix:/run/php/php<%= php-version %>-fpm.sock;
+	}
+
+        location ~ /\.ht {
+                deny all;
+        }
+
+        location /phpmyadmin/ {
+                root /home/staticweb/;
+                index index.php index.html index.htm;
+
+                try_files $uri $uri/ =404;
+
+                location ~ \.php$ {
+                        include snippets/fastcgi-php.conf;
+                        fastcgi_pass unix:/run/php/php<%= php-version %>-fpm.sock;
+                }
+        }
+}

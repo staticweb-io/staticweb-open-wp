@@ -1,0 +1,71 @@
+server {
+	listen 80 default_server;
+	listen [::]:80 default_server;
+	server_name *.compute-1.amazonaws.com;
+
+	root /home/staticweb/wordpress;
+
+	index index.php index.html index.htm;
+
+	client_max_body_size 1G;
+
+	location / {
+		if ( $http_staticweb_cloudfront_authorization = '' ) {
+                        access_log /var/log/nginx/access-unauth.log;
+			return 401;
+		}
+
+		if ( $http_staticweb_cloudfront_authorization != '<%= auth-header %>' ) {
+                        access_log /var/log/nginx/access-unauth.log;
+			return 403;
+		}
+
+		try_files $uri $uri/ =404;
+
+                if (!-e $request_filename) {
+                        rewrite ^(.+)$ /index.php?q=$1 last;
+                }
+	}
+
+	location ~ \.php$ {
+                if ( $http_staticweb_cloudfront_authorization = '' ) {
+                        access_log /var/log/nginx/access-unauth.log;
+                        return 401;
+                }
+
+                if ( $http_staticweb_cloudfront_authorization != '<%= auth-header %>' ) {
+                        access_log /var/log/nginx/access-unauth.log;
+                        return 403;
+                }
+
+		include snippets/fastcgi-php.conf;
+
+		fastcgi_pass unix:/run/php/php<%= php-version %>-fpm.sock;
+	}
+
+        location ~ /\.ht {
+                deny all;
+        }
+
+        location /phpmyadmin/ {
+                if ( $http_staticweb_cloudfront_authorization = '' ) {
+                        access_log /var/log/nginx/access-unauth.log;
+                        return 401;
+                }
+
+                if ( $http_staticweb_cloudfront_authorization != '<%= auth-header %>' ) {
+                        access_log /var/log/nginx/access-unauth.log;
+                        return 403;
+                }
+
+                root /home/staticweb/;
+                index index.php index.html index.htm;
+
+                try_files $uri $uri/ =404;
+
+                location ~ \.php$ {
+                        include snippets/fastcgi-php.conf;
+                        fastcgi_pass unix:/run/php/php<%= php-version %>-fpm.sock;
+                }
+        }
+}
