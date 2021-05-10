@@ -182,26 +182,35 @@
 
 (defn TemplateParameters []
   (let [auth-header-id (str (gensym "G__AuthHeader"))
+        state (r/atom {:show-params? false})
         user-pass-id (str (gensym "G__UserPass"))]
     (fn [{:keys [auth-header user-pass] :as params}]
-      [:div {:class "launch-stack-container"}
-       [:div
-        [:h3 "Launch Stack"]]
-       [:div
-        [LaunchStack params]]
-       [:div
-        [:label {:for auth-header-id}
-         "CloudFrontAuthorizationHeader:"]
-        [:input {:id auth-header-id :read-only true :value auth-header}]
-        [CopyButton {:input-id auth-header-id}]]
-       [:div
-        [:label {:for user-pass-id}
-         "UserPass:"]
-        [:input {:id user-pass-id
-                 :read-only true
-                 :style (when (empty? user-pass) {:background-color "rgb(255, 88, 70)"})
-                 :value (or user-pass "Please enter a strong password.")}]
-        [CopyButton {:input-id user-pass-id}]]])))
+      (let [{:keys [show-params?]} @state]
+        [:div {:class "launch-stack-container"}
+         [:div
+          [:h3 "Launch Stack"]]
+         [:div
+          [LaunchStack params]]
+         [:div
+          [:button {:on-click #(swap! state update :show-params? not)}
+           (if show-params?
+             "Hide Parameters"
+             "Show Parameters")]]
+         (when show-params?
+           [:div
+            [:label {:for auth-header-id}
+             "CloudFrontAuthorizationHeader:"]
+            [:input {:id auth-header-id :read-only true :value auth-header}]
+            [CopyButton {:input-id auth-header-id}]])
+         (when show-params?
+           [:div
+            [:label {:for user-pass-id}
+             "UserPass:"]
+            [:input {:id user-pass-id
+                     :read-only true
+                     :style (when (empty? user-pass) {:background-color "rgb(255, 88, 70)"})
+                     :value (or user-pass "Please enter a strong password.")}]
+            [CopyButton {:input-id user-pass-id}]])]))))
 
 (defn App []
   (let [state (r/atom {:auth-header (str "Bearer " (uuid/v4))
