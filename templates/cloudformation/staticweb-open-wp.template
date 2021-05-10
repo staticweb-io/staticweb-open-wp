@@ -1,0 +1,721 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+  "Conditions" : {
+    "UsingGenericLiveDomain" : {
+      "Fn::Equals" : [ "", {
+        "Ref" : "LiveSiteCertificateArn"
+      } ]
+    },
+    "UsingGenericWPDomain" : {
+      "Fn::Equals" : [ "", {
+        "Ref" : "WPCertificateArn"
+      } ]
+    },
+    "UsingKeyName" : {
+      "Fn::Not" : [ {
+        "Fn::Equals" : [ "", {
+          "Ref" : "KeyName"
+        } ]
+      } ]
+    }
+  },
+  "Description" : "This template creates an EC2 instance with a secured WordPress install configured for static deployment as well as an S3 bucket and a CloudFront distribution to serve the static files.",
+  "Mappings" : {
+    "RegionMap" : {
+      "us-east-1" : {
+        "ELBAccountId" : "127311923021"
+      }
+    }
+  },
+  "Outputs" : {
+    "AdminLoginUrl" : {
+      "Export" : {
+        "Name" : {
+          "Fn::Sub" : "${AWS::StackName}-AdminLoginUrl"
+        }
+      },
+      "Value" : {
+        "Fn::Join" : [ "", [ "https://", {
+          "Fn::GetAtt" : [ "WPServerDistribution", "DomainName" ]
+        }, "/wp-admin/" ] ]
+      }
+    },
+    "StaticSiteDomainName" : {
+      "Export" : {
+        "Name" : {
+          "Fn::Sub" : "${AWS::StackName}-StaticSiteDomainName"
+        }
+      },
+      "Value" : {
+        "Fn::GetAtt" : [ "StaticSiteDistribution", "DomainName" ]
+      }
+    },
+    "WPServerDomainName" : {
+      "Export" : {
+        "Name" : {
+          "Fn::Sub" : "${AWS::StackName}-WPServerDomainName"
+        }
+      },
+      "Value" : {
+        "Fn::GetAtt" : [ "WPServerDistribution", "DomainName" ]
+      }
+    }
+  },
+  "Parameters" : {
+    "CloudFrontAuthorizationHeader" : {
+      "AllowedPattern" : "Bearer [A-Za-z\\d+/=_\\-]+",
+      "ConstraintDescription" : "Must start with \"Bearer \" and be 32-128 characters long. The characters after \"Bearer \" must be alphanumeric or /, +, =, _, or -",
+      "Description" : "Authorization header to add to CloudFront requests so that the WordPress server will accept the request.",
+      "MaxLength" : 128,
+      "MinLength" : 32,
+      "Type" : "String"
+    },
+    "KeyName" : {
+      "ConstraintDescription" : "Must be the name of an existing EC2 KeyPair.",
+      "Description" : "Name of an existing EC2 KeyPair to enable SSH access to the instances",
+      "Type" : "String"
+    },
+    "LiveSiteCertificateArn" : {
+      "Description" : "Arn of the certificate for a custom live site domain.",
+      "Type" : "String"
+    },
+    "LiveSiteDomainName" : {
+      "Description" : "Fully-qualifed domain name for the live site, if using a custom domain.",
+      "Type" : "String"
+    },
+    "UserPass" : {
+      "AllowedPattern" : "\\\\\\$P\\\\\\$.+",
+      "ConstraintDescription" : "Must be in PHPass format with the $s escaped, e.g., \"\\$P\\$BfxyjxCkv2XmidTZjA2lV6wYPYZcXi.\"",
+      "Description" : "Salted hash of the initial user password. You should set a new password after you log in.",
+      "MaxLength" : 36,
+      "MinLength" : 36,
+      "Type" : "String"
+    },
+    "WPCertificateArn" : {
+      "Description" : "Arn of the certificate for the WordPress admin domain.",
+      "Type" : "String"
+    },
+    "WPDomainName" : {
+      "Description" : "Fully-qualifed domain name for the WordPress admin, if using a custom domain.",
+      "Type" : "String"
+    },
+    "WordPressAMI" : {
+      "Default" : "ami-036f61946fc91a0d5",
+      "Description" : "AMI to use for the WordPress server.",
+      "Type" : "String"
+    }
+  },
+  "Resources" : {
+    "CFInvalidationPolicy" : {
+      "Properties" : {
+        "PolicyDocument" : {
+          "Statement" : [ {
+            "Action" : [ "cloudfront:ListInvalidations", "cloudfront:GetInvalidation", "cloudfront:CreateInvalidation" ],
+            "Effect" : "Allow",
+            "Resource" : [ {
+              "Fn::Join" : [ "", [ "arn:aws:cloudfront::", {
+                "Ref" : "AWS::AccountId"
+              }, ":distribution/", {
+                "Ref" : "StaticSiteDistribution"
+              } ] ]
+            } ]
+          } ],
+          "Version" : "2012-10-17"
+        }
+      },
+      "Type" : "AWS::IAM::ManagedPolicy"
+    },
+    "LoggingBucket" : {
+      "Properties" : {
+        "AccessControl" : "Private",
+        "BucketEncryption" : {
+          "ServerSideEncryptionConfiguration" : [ {
+            "BucketKeyEnabled" : true,
+            "ServerSideEncryptionByDefault" : {
+              "SSEAlgorithm" : "AES256"
+            }
+          } ]
+        },
+        "LifecycleConfiguration" : {
+          "Rules" : [ {
+            "ExpirationInDays" : 365,
+            "Status" : "Enabled",
+            "Transitions" : [ {
+              "StorageClass" : "GLACIER",
+              "TransitionInDays" : 1
+            } ]
+          } ]
+        },
+        "PublicAccessBlockConfiguration" : {
+          "BlockPublicAcls" : true,
+          "BlockPublicPolicy" : true,
+          "IgnorePublicAcls" : true,
+          "RestrictPublicBuckets" : true
+        }
+      },
+      "Type" : "AWS::S3::Bucket"
+    },
+    "LoggingBucketPolicy" : {
+      "Properties" : {
+        "Bucket" : {
+          "Ref" : "LoggingBucket"
+        },
+        "PolicyDocument" : {
+          "Statement" : [ {
+            "Action" : "s3:PutObject",
+            "Effect" : "Allow",
+            "Principal" : {
+              "AWS" : {
+                "Fn::Join" : [ "", [ "arn:aws:iam::", {
+                  "Fn::FindInMap" : [ "RegionMap", {
+                    "Ref" : "AWS::Region"
+                  }, "ELBAccountId" ]
+                }, ":root" ] ]
+              }
+            },
+            "Resource" : {
+              "Fn::Join" : [ "", [ "arn:aws:s3:::", {
+                "Ref" : "LoggingBucket"
+              }, "/AWSLogs/", {
+                "Ref" : "AWS::AccountId"
+              }, "/*" ] ]
+            }
+          }, {
+            "Action" : "s3:PutObject",
+            "Condition" : {
+              "StringEquals" : {
+                "s3:x-amz-acl" : "bucket-owner-full-control"
+              }
+            },
+            "Effect" : "Allow",
+            "Principal" : {
+              "Service" : "delivery.logs.amazonaws.com"
+            },
+            "Resource" : {
+              "Fn::Join" : [ "", [ "arn:aws:s3:::", {
+                "Ref" : "LoggingBucket"
+              }, "/AWSLogs/", {
+                "Ref" : "AWS::AccountId"
+              }, "/*" ] ]
+            }
+          }, {
+            "Action" : "s3:GetBucketAcl",
+            "Effect" : "Allow",
+            "Principal" : {
+              "Service" : "delivery.logs.amazonaws.com"
+            },
+            "Resource" : {
+              "Fn::Join" : [ "", [ "arn:aws:s3:::", {
+                "Ref" : "LoggingBucket"
+              } ] ]
+            }
+          } ],
+          "Version" : "2012-10-17"
+        }
+      },
+      "Type" : "AWS::S3::BucketPolicy"
+    },
+    "S3AuthorAccessPolicy" : {
+      "Properties" : {
+        "PolicyDocument" : {
+          "Statement" : [ {
+            "Action" : [ "s3:GetBucketLocation" ],
+            "Effect" : "Allow",
+            "Resource" : [ {
+              "Fn::Join" : [ "", [ "arn:aws:s3:::", {
+                "Ref" : "StaticSiteBucket"
+              } ] ]
+            } ]
+          }, {
+            "Action" : [ "s3:PutObject", "s3:GetObject", "s3:DeleteObject", "s3:PutObjectAcl" ],
+            "Effect" : "Allow",
+            "Resource" : [ {
+              "Fn::Join" : [ "", [ "arn:aws:s3:::", {
+                "Ref" : "StaticSiteBucket"
+              }, "/*" ] ]
+            } ]
+          } ],
+          "Version" : "2012-10-17"
+        }
+      },
+      "Type" : "AWS::IAM::ManagedPolicy"
+    },
+    "StackDescribePolicy" : {
+      "Properties" : {
+        "PolicyDocument" : {
+          "Statement" : [ {
+            "Action" : "cloudformation:DescribeStacks",
+            "Effect" : "Allow",
+            "Resource" : {
+              "Ref" : "AWS::StackId"
+            }
+          } ],
+          "Version" : "2012-10-17"
+        }
+      },
+      "Type" : "AWS::IAM::ManagedPolicy"
+    },
+    "StaticSiteBucket" : {
+      "Properties" : {
+        "AccessControl" : "PublicRead",
+        "WebsiteConfiguration" : {
+          "ErrorDocument" : "error.html",
+          "IndexDocument" : "index.html"
+        }
+      },
+      "Type" : "AWS::S3::Bucket"
+    },
+    "StaticSiteBucketPolicy" : {
+      "Properties" : {
+        "Bucket" : {
+          "Ref" : "StaticSiteBucket"
+        },
+        "PolicyDocument" : {
+          "Statement" : [ {
+            "Action" : "s3:GetObject",
+            "Effect" : "Allow",
+            "Principal" : "*",
+            "Resource" : {
+              "Fn::Join" : [ "", [ "arn:aws:s3:::", {
+                "Ref" : "StaticSiteBucket"
+              }, "/*" ] ]
+            },
+            "Sid" : "PublicReadForGetBucketObjects"
+          } ],
+          "Version" : "2012-10-17"
+        }
+      },
+      "Type" : "AWS::S3::BucketPolicy"
+    },
+    "StaticSiteDistribution" : {
+      "Properties" : {
+        "DistributionConfig" : {
+          "Aliases" : {
+            "Fn::If" : [ "UsingGenericLiveDomain", {
+              "Ref" : "AWS::NoValue"
+            }, [ {
+              "Ref" : "LiveSiteDomainName"
+            } ] ]
+          },
+          "DefaultCacheBehavior" : {
+            "AllowedMethods" : [ "GET", "HEAD" ],
+            "Compress" : true,
+            "ForwardedValues" : {
+              "Cookies" : {
+                "Forward" : "none"
+              },
+              "QueryString" : true
+            },
+            "TargetOriginId" : "StaticSiteBucketOrigin",
+            "ViewerProtocolPolicy" : "redirect-to-https"
+          },
+          "Enabled" : true,
+          "HttpVersion" : "http2",
+          "Logging" : {
+            "Bucket" : {
+              "Fn::GetAtt" : [ "LoggingBucket", "DomainName" ]
+            },
+            "IncludeCookies" : false,
+            "Prefix" : "static-site/"
+          },
+          "Origins" : [ {
+            "CustomOriginConfig" : {
+              "OriginProtocolPolicy" : "http-only"
+            },
+            "DomainName" : {
+              "Fn::Join" : [ "", [ {
+                "Ref" : "StaticSiteBucket"
+              }, ".s3-website-", {
+                "Ref" : "AWS::Region"
+              }, ".amazonaws.com" ] ]
+            },
+            "Id" : "StaticSiteBucketOrigin"
+          } ],
+          "ViewerCertificate" : {
+            "Fn::If" : [ "UsingGenericLiveDomain", {
+              "Ref" : "AWS::NoValue"
+            }, {
+              "AcmCertificateArn" : {
+                "Ref" : "LiveSiteCertificateArn"
+              },
+              "SslSupportMethod" : "sni-only"
+            } ]
+          }
+        }
+      },
+      "Type" : "AWS::CloudFront::Distribution"
+    },
+    "WPDistOriginRequestFunction" : {
+      "Properties" : {
+        "Code" : {
+          "ZipFile" : {
+            "Fn::Join" : [ "", [ "const AUTH_HEADER ='", {
+              "Ref" : "CloudFrontAuthorizationHeader"
+            }, "';\n", "const INSTANCE_ID = '", {
+              "Ref" : "WPServer"
+            }, "';\n", "const INSTANCE_REGION = '", {
+              "Ref" : "AWS::Region"
+            }, "';\n\n", "/* Check whether the EC2 instance is running. If so, tell CloudFront\n * to use its current IP as the origin. If not, start the instance or\n * wait for it to start and show a loading page.\n*/\n\nconst AWS = require(\"aws-sdk\");\n\nconst logs = new AWS.CloudWatchLogs({apiVersion: '2014-03-28', region: process.env.AWS_REGION});\nconst ec2 = new AWS.EC2({apiVersion: '2016-11-15', region: INSTANCE_REGION});\nconst describeParams = {InstanceIds: [INSTANCE_ID]};\n\nconst staticFileDomain = \"static.staticweb.io\";\n\nconst customAuthHeader = [{\n  key: 'StaticWeb-CloudFront-Authorization',\n  value: AUTH_HEADER\n}];\n\nvar cSLR =Promise.resolve(false);\nconst sLR=async(lGN)=>{\nconst cached=await cSLR;\nif(cached)return cached;\nconsole.log(\"Setting log retention to 14 days.\");\ncSLR=new Promise((resolve,reject)=>{\nlogs.putRetentionPolicy({logGroupName:lGN,retentionInDays:14},\nfunction(err,data) {\nif(err){\nconsole.error(err);\n}\nresolve(true);\n}\n);\n});\nreturn await cSLR;\n};\n\nvar cDI = Promise.resolve(null);\n\nconst getInstance = (describeData) => {\n  const reservs = describeData.Reservations[0];\n  if (reservs) return reservs.Instances[0];\n};\n\nconst describeInstance = async() => {\n  const di = await cDI;\n  const elapsed = di ? new Date().getTime() - di.time : null;\n  if ( di && 2000 >= elapsed ) {\n    console.log(\"describeInstance cache hit\");\n    return di;\n  }\n  \n  cDI = new Promise((resolve, reject) => {\n    ec2.describeInstances(describeParams, function(err, data) {\n      console.log(\"describeInstance cache miss\");\n      const time = new Date().getTime();\n      if (err) {\n        console.log(err);\n        resolve({err: err, time: time});\n      } else {\n        resolve({data: data, time: time});\n      }\n    });\n  });\n\n  return await cDI;\n};\n\nexports.handler = async (event, context) => {\n  const record = event.Records[0].cf;\n  const request = record.request;\n  const customOrigin = request.origin.custom;\n  const di = await describeInstance();\n  const instance = di.data ? getInstance(di.data) : null;\n  await sLR(context.logGroupName);\n  if (instance && 16 == instance.State.Code) {\n    customOrigin.domainName = instance.PublicDnsName;\n    customOrigin.customHeaders['staticweb-cloudfront-authorization'] = customAuthHeader;\n  } else {\n    customOrigin.domainName = staticFileDomain;\n    customOrigin.port = 443\n    customOrigin.protocol = \"https\";\n    customOrigin.sslProcotols = [\"TLSV1.2\"];\n    const h = request.headers;\n    delete h.authorization;\n    delete h.cookie;\n    h.host[0].value = staticFileDomain;\n    request.querystring = \"\";\n    if ( di.err ) {\n      request.uri = \"/staticweb-open-wp/error-describe-instances.html\";\n    } else if ( ! instance ) {\n      request.uri = \"/staticweb-open-wp/instance-not-found.html\";\n    } else {\n      request.uri = \"/staticweb-open-wp/starting-instance.html\";\n    }\n  }\n\n  console.log(\"Routing to \" + customOrigin.protocol + \"://\" + customOrigin.domainName + customOrigin.path + request.uri);\n\n  return request;\n};\n" ] ]
+          }
+        },
+        "Description" : "Check whether the EC2 instance is running. If so, tell CloudFront to use its current IP as the origin. If not, start the instance or wait for it to start and show a loading page.",
+        "Handler" : "index.handler",
+        "MemorySize" : 128,
+        "Role" : {
+          "Fn::GetAtt" : [ "WPDistOriginRequestRole", "Arn" ]
+        },
+        "Runtime" : "nodejs12.x"
+      },
+      "Type" : "AWS::Lambda::Function"
+    },
+    "WPDistOriginRequestFunctionVersion" : {
+      "Properties" : {
+        "Description" : "Check whether the EC2 instance is running. If so, tell CloudFront to use its current IP as the origin. If not, start the instance or wait for it to start and show a loading page.",
+        "FunctionName" : {
+          "Ref" : "WPDistOriginRequestFunction"
+        }
+      },
+      "Type" : "AWS::Lambda::Version"
+    },
+    "WPDistOriginRequestPolicy" : {
+      "Properties" : {
+        "PolicyDocument" : {
+          "Statement" : [ {
+            "Action" : "ec2:DescribeInstances",
+            "Effect" : "Allow",
+            "Resource" : "*"
+          }, {
+            "Action" : [ "ec2:StartInstances", "ec2:StopInstances" ],
+            "Effect" : "Allow",
+            "Resource" : {
+              "Fn::Join" : [ "", [ "arn:aws:ec2:", {
+                "Ref" : "AWS::Region"
+              }, ":", {
+                "Ref" : "AWS::AccountId"
+              }, ":", "instance/", {
+                "Ref" : "WPServer"
+              } ] ]
+            }
+          }, {
+            "Action" : [ "logs:PutRetentionPolicy" ],
+            "Effect" : "Allow",
+            "Resource" : {
+              "Fn::Join" : [ "", [ "arn:aws:logs:*:", {
+                "Ref" : "AWS::AccountId"
+              }, ":log-group:/aws/lambda/us-east-1.", {
+                "Ref" : "AWS::StackName"
+              }, "-WPDistOriginRequestFunction-*" ] ]
+            }
+          }, {
+            "Action" : [ "logs:PutRetentionPolicy" ],
+            "Effect" : "Allow",
+            "Resource" : {
+              "Fn::Join" : [ "", [ "arn:aws:logs:*:", {
+                "Ref" : "AWS::AccountId"
+              }, ":log-group:/aws/lambda/us-east-1.", {
+                "Ref" : "AWS::StackName"
+              }, "-WPStatusFunction-*" ] ]
+            }
+          } ],
+          "Version" : "2012-10-17"
+        }
+      },
+      "Type" : "AWS::IAM::ManagedPolicy"
+    },
+    "WPDistOriginRequestRole" : {
+      "Properties" : {
+        "AssumeRolePolicyDocument" : {
+          "Statement" : {
+            "Action" : "sts:AssumeRole",
+            "Effect" : "Allow",
+            "Principal" : {
+              "Service" : [ "edgelambda.amazonaws.com", "lambda.amazonaws.com" ]
+            }
+          },
+          "Version" : "2012-10-17"
+        },
+        "ManagedPolicyArns" : [ "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole", {
+          "Ref" : "WPDistOriginRequestPolicy"
+        } ]
+      },
+      "Type" : "AWS::IAM::Role"
+    },
+    "WPServer" : {
+      "CreationPolicy" : {
+        "ResourceSignal" : {
+          "Timeout" : "PT15M"
+        }
+      },
+      "Properties" : {
+        "BlockDeviceMappings" : [ {
+          "DeviceName" : "/dev/xvda",
+          "Ebs" : {
+            "DeleteOnTermination" : true,
+            "Encrypted" : true,
+            "VolumeType" : "gp3"
+          }
+        } ],
+        "IamInstanceProfile" : {
+          "Ref" : "WPServerInstanceProfile"
+        },
+        "ImageId" : {
+          "Ref" : "WordPressAMI"
+        },
+        "InstanceType" : "t2.micro",
+        "KeyName" : {
+          "Fn::If" : [ "UsingKeyName", {
+            "Ref" : "KeyName"
+          }, {
+            "Ref" : "AWS::NoValue"
+          } ]
+        },
+        "SecurityGroups" : [ {
+          "Ref" : "WPServerSecurityGroup"
+        } ],
+        "Tags" : [ {
+          "Key" : "staticweb:stack-id",
+          "Value" : {
+            "Ref" : "AWS::StackId"
+          }
+        }, {
+          "Key" : "Name",
+          "Value" : {
+            "Ref" : "AWS::StackName"
+          }
+        } ],
+        "UserData" : {
+          "Fn::Base64" : {
+            "Fn::Join" : [ "", [ "#!/bin/bash -xe\n\n", "cp /home/admin/.ssh/authorized_keys /home/staticweb/.ssh\n", "chown staticweb:staticweb /home/staticweb/.ssh/authorized_keys\n", "echo \"", "{:bucket-name \\\"", {
+              "Ref" : "StaticSiteBucket"
+            }, "\\\"\n", " :cloudfront-auth-header \\\"", {
+              "Ref" : "CloudFrontAuthorizationHeader"
+            }, "\\\"\n", " :cloudfront-distribution \\\"", {
+              "Ref" : "StaticSiteDistribution"
+            }, "\\\"\n", " :cloudfront-domain-name \\\"", {
+              "Fn::GetAtt" : [ "StaticSiteDistribution", "DomainName" ]
+            }, "\\\"\n", " :create-jobs? true\n", " :region \\\"", {
+              "Ref" : "AWS::Region"
+            }, "\\\"\n", " :stack-id \\\"", {
+              "Ref" : "AWS::StackId"
+            }, "\\\"\n", " :user-pass \\\"", {
+              "Ref" : "UserPass"
+            }, "\\\"}\n\" > /opt/staticweb/init-deploy.edn\n", "bash /opt/staticweb/static-wp-daemon/init-deploy.sh\n", "/usr/local/bin/cfn-signal -e $?", " --stack ", {
+              "Ref" : "AWS::StackName"
+            }, " --resource WPServer ", " --region ", {
+              "Ref" : "AWS::Region"
+            }, "\n" ] ]
+          }
+        }
+      },
+      "Type" : "AWS::EC2::Instance"
+    },
+    "WPServerDistribution" : {
+      "Properties" : {
+        "DistributionConfig" : {
+          "Aliases" : {
+            "Fn::If" : [ "UsingGenericWPDomain", {
+              "Ref" : "AWS::NoValue"
+            }, [ {
+              "Ref" : "WPDomainName"
+            } ] ]
+          },
+          "CacheBehaviors" : [ {
+            "AllowedMethods" : [ "DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT" ],
+            "Compress" : true,
+            "DefaultTTL" : 0,
+            "ForwardedValues" : {
+              "Cookies" : {
+                "Forward" : "none"
+              },
+              "QueryString" : false
+            },
+            "LambdaFunctionAssociations" : [ {
+              "EventType" : "viewer-request",
+              "IncludeBody" : true,
+              "LambdaFunctionARN" : {
+                "Ref" : "WPStatusFunctionVersion"
+              }
+            } ],
+            "MaxTTL" : 0,
+            "MinTTL" : 0,
+            "PathPattern" : "/_staticweb/status",
+            "TargetOriginId" : "DummyOrigin",
+            "ViewerProtocolPolicy" : "redirect-to-https"
+          } ],
+          "DefaultCacheBehavior" : {
+            "AllowedMethods" : [ "DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT" ],
+            "Compress" : true,
+            "DefaultTTL" : 0,
+            "ForwardedValues" : {
+              "Cookies" : {
+                "Forward" : "all"
+              },
+              "Headers" : [ "host" ],
+              "QueryString" : true
+            },
+            "LambdaFunctionAssociations" : [ {
+              "EventType" : "origin-request",
+              "IncludeBody" : false,
+              "LambdaFunctionARN" : {
+                "Ref" : "WPDistOriginRequestFunctionVersion"
+              }
+            } ],
+            "MaxTTL" : 0,
+            "MinTTL" : 0,
+            "TargetOriginId" : "DummyOrigin",
+            "ViewerProtocolPolicy" : "redirect-to-https"
+          },
+          "Enabled" : true,
+          "HttpVersion" : "http2",
+          "Logging" : {
+            "Bucket" : {
+              "Fn::GetAtt" : [ "LoggingBucket", "DomainName" ]
+            },
+            "IncludeCookies" : false,
+            "Prefix" : "wordpress-server/"
+          },
+          "Origins" : [ {
+            "CustomOriginConfig" : {
+              "OriginProtocolPolicy" : "http-only"
+            },
+            "DomainName" : "static.staticweb.io",
+            "Id" : "DummyOrigin"
+          } ],
+          "ViewerCertificate" : {
+            "Fn::If" : [ "UsingGenericWPDomain", {
+              "Ref" : "AWS::NoValue"
+            }, {
+              "AcmCertificateArn" : {
+                "Ref" : "WPCertificateArn"
+              },
+              "SslSupportMethod" : "sni-only"
+            } ]
+          }
+        }
+      },
+      "Type" : "AWS::CloudFront::Distribution"
+    },
+    "WPServerInstanceProfile" : {
+      "Properties" : {
+        "Path" : "/StaticWPServers/",
+        "Roles" : [ {
+          "Ref" : "WPServerRole"
+        } ]
+      },
+      "Type" : "AWS::IAM::InstanceProfile"
+    },
+    "WPServerLifecyclePolicy" : {
+      "Properties" : {
+        "Description" : "WordPress Server Backups",
+        "ExecutionRoleArn" : {
+          "Fn::Join" : [ "", [ "arn:aws:iam::", {
+            "Ref" : "AWS::AccountId"
+          }, ":role/service-role/AWSDataLifecycleManagerDefaultRole" ] ]
+        },
+        "PolicyDetails" : {
+          "ResourceTypes" : [ "INSTANCE" ],
+          "Schedules" : [ {
+            "CopyTags" : true,
+            "CreateRule" : {
+              "Interval" : 12,
+              "IntervalUnit" : "HOURS",
+              "Times" : [ "09:00" ]
+            },
+            "Name" : "12 Hour Schedule",
+            "RetainRule" : {
+              "Count" : 730
+            },
+            "TagsToAdd" : [ {
+              "Key" : "staticweb:stack-id",
+              "Value" : {
+                "Ref" : "AWS::StackId"
+              }
+            } ],
+            "VariableTags" : [ {
+              "Key" : "instance-id",
+              "Value" : "$(instance-id)"
+            } ]
+          } ],
+          "TargetTags" : [ {
+            "Key" : "staticweb:stack-id",
+            "Value" : {
+              "Ref" : "AWS::StackId"
+            }
+          } ]
+        },
+        "State" : "ENABLED"
+      },
+      "Type" : "AWS::DLM::LifecyclePolicy"
+    },
+    "WPServerRole" : {
+      "Properties" : {
+        "AssumeRolePolicyDocument" : {
+          "Statement" : [ {
+            "Action" : [ "sts:AssumeRole" ],
+            "Effect" : "Allow",
+            "Principal" : {
+              "Service" : [ "ec2.amazonaws.com" ]
+            }
+          } ],
+          "Version" : "2012-10-17"
+        },
+        "ManagedPolicyArns" : [ "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore", {
+          "Ref" : "S3AuthorAccessPolicy"
+        }, {
+          "Ref" : "CFInvalidationPolicy"
+        }, {
+          "Ref" : "StackDescribePolicy"
+        } ],
+        "Path" : "/"
+      },
+      "Type" : "AWS::IAM::Role"
+    },
+    "WPServerSecurityGroup" : {
+      "Properties" : {
+        "GroupDescription" : "Allow HTTP(S) access.",
+        "SecurityGroupIngress" : [ {
+          "CidrIp" : "0.0.0.0/0",
+          "FromPort" : 80,
+          "IpProtocol" : "tcp",
+          "ToPort" : 80
+        }, {
+          "CidrIpv6" : "::/0",
+          "FromPort" : 80,
+          "IpProtocol" : "tcp",
+          "ToPort" : 80
+        } ]
+      },
+      "Type" : "AWS::EC2::SecurityGroup"
+    },
+    "WPStatusFunction" : {
+      "Properties" : {
+        "Code" : {
+          "ZipFile" : {
+            "Fn::Join" : [ "", [ "const INSTANCE_ID = '", {
+              "Ref" : "WPServer"
+            }, "';\n", "const INSTANCE_REGION = '", {
+              "Ref" : "AWS::Region"
+            }, "';\n\n", "/* Check whether the EC2 instance is running. If so, tell CloudFront\n * to use its current IP as the origin. If not, start the instance or\n * wait for it to start and show a loading page.\n*/\n\nconst AWS = require(\"aws-sdk\");\n\nconst logs = new AWS.CloudWatchLogs({apiVersion: '2014-03-28', region: process.env.AWS_REGION});\nconst ec2 = new AWS.EC2({apiVersion: '2016-11-15', region: INSTANCE_REGION});\nconst describeParams = {InstanceIds: [INSTANCE_ID]};\nconst startParams = describeParams;\n\nvar cSLR =Promise.resolve(false);\nconst sLR=async(lGN)=>{\nconst cached=await cSLR;\nif(cached)return cached;\nconsole.log(\"Setting log retention to 14 days.\");\ncSLR=new Promise((resolve,reject)=>{\nlogs.putRetentionPolicy({logGroupName:lGN,retentionInDays:14},\nfunction(err,data) {\nif(err){\nconsole.error(err);\n}\nresolve(true);\n}\n);\n});\nreturn await cSLR;\n};\n\nvar cDI=Promise.resolve(null);\nvar cSI=Promise.resolve(null);\n\nconst getInstance = (describeData) => {\n  const reservs = describeData.Reservations[0];\n  if (reservs) return reservs.Instances[0];\n};\n\nconst startInstance = async() => {\n  const si = await cSI;\n  const elapsed = si ? new Date().getTime() - si.time : null;\n  if ( si && 5000 >= elapsed ) {\n    console.log(\"startInstance cache hit\");\n    return si;\n  }\n\n  cSI=new Promise((resolve, reject) => {\n    ec2.startInstances(startParams, function(err, data) {\n      const time = new Date().getTime();\n      if (err) {\n        console.error(\"Error starting instance: \" + JSON.stringify(err));\n        resolve({err: err, time: time});\n      } else {\n        console.log(\"Starting instance\");\n        resolve({data: data, time: time});\n      }\n    });\n  });\n  return await cSI;\n};\n\nconst describeInstance = async() => {\n  const di = await cDI;\n  const elapsed = di ? new Date().getTime() - di.time : null;\n  if ( di && 2000 >= elapsed ) {\n    console.log(\"describeInstance cache hit\");\n    return di;\n  }\n  \n  cDI = new Promise((resolve, reject) => {\n    ec2.describeInstances(describeParams, function(err, data) {\n      console.log(\"describeInstance cache miss\");\n      const time = new Date().getTime();\n      if (err) {\n        console.log(err);\n        resolve({err: err, time: time});\n      } else {\n        resolve({data: data, time: time});\n      }\n    });\n  });\n\n  return await cDI;\n};\nconst bad={status:400,statusDescription:'Bad Request'};\nconst errR={status:500,statusDescription:'Server Error'};\nexports.handler = async (event, context) => {\n  const record = event.Records[0].cf;\n  const request = record.request;\n  const di = await describeInstance();\n\n  if ( di.err ) {\n    return errR;\n  }\n  await sLR(context.logGroupName);\n  const instance = getInstance(di.data);\n  const state = instance.State.Name;\n\n  console.log(JSON.stringify(event));\n\n  if ( 'POST' == request.method ) {\n    const reqBody = Buffer.from(request.body.data, 'base64').toString();\n    try {\n      const jsBody = JSON.parse(reqBody);\n      if ( jsBody && typeof jsBody === 'object' && jsBody['start'] ) {\n        const start = jsBody['start'];\n        if ( typeof start !== 'boolean' ) {\n          return bad;\n        } else if ( start && 80 === instance.State.Code ) {\n          const si = await startInstance();\n          if ( si.err ) {\n            return errR;\n          }\n        }\n      }\n    } catch (e) {\n      return bad;\n    }\n  }\n\n  const body = ('running' === state) ? {\n    state: state,\n    ready: true,\n    messageHtml: 'Waiting for server response...'\n  } : {\n    state: state,\n    ready: false,\n    messageHtml: 'Starting your server...'\n  };\n\n  return {\n    body: JSON.stringify(body),\n    bodyEncoding: 'text',\n    status: 200,\n    statusDescription: 'OK',\n    headers: {\n      \"content-type\": [{\n        key: 'Content-Type',\n        value: 'application/json'\n      }]\n    }\n  };\n};\n" ] ]
+          }
+        },
+        "Description" : "Return the status of the WP instance. Start it if asked to.",
+        "Handler" : "index.handler",
+        "MemorySize" : 128,
+        "Role" : {
+          "Fn::GetAtt" : [ "WPDistOriginRequestRole", "Arn" ]
+        },
+        "Runtime" : "nodejs12.x"
+      },
+      "Type" : "AWS::Lambda::Function"
+    },
+    "WPStatusFunctionVersion" : {
+      "Properties" : {
+        "Description" : "Return the status of the WP instance. Start it if asked to.",
+        "FunctionName" : {
+          "Ref" : "WPStatusFunction"
+        }
+      },
+      "Type" : "AWS::Lambda::Version"
+    }
+  }
+}
